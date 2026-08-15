@@ -71,9 +71,45 @@ while True:
                                         print(f"Alumno con carnet {carnet_buscar} no encontrado.")
 
                                 case "5":
-                                    print("Administrar curso...")
+                                    print("Administrar curso... \n---------------------------------------------------------------------")
+                                    nuevo_curso = input("Ingrese el nombre del curso: ")
+                                    while not nuevo_curso.isalnum():
+                                        print("Error: El curso no debe tener caracteres especiales, solo numeros y letras.")
+                                        nuevo_curso = input("Ingrese el nombre del curso: ")
+
+                                    while True:
+                                        try:
+                                            total_clases = int(input("Defina la cantidad total de clases programadas: "))
+                                            if total_clases > 0:
+                                                break
+                                            print("Error: Debe ingresar un numero mayor a 0.")
+                                        except ValueError:
+                                            print("Error: Solo se permiten numeros enteros.")
+
+                                    cancelar = input("Desea cancelar una clase hoy? (S/N): ").strip().upper()
+                                    if cancelar == "S":
+                                        total_clases -= 1
+                                        print(f"Clase cancelada. El total de clases ahora es: {total_clases}")
+                                        print("Aprobando asistencia automaticamente a todos los alumnos por la clase cancelada...")
+
+                                    cursor.execute("UPDATE alumnos SET curso = ?", (nuevo_curso,))
+                                    conexion.commit()
+                                    print(f"Curso '{nuevo_curso}' administrado y actualizado exitosamente!")
+
                                 case "6":
-                                    print("Eliminando alumno...")
+                                    carnet_eliminar = input("Ingrese el carnet del alumno a eliminar: ").upper()
+                                    cursor.execute("SELECT * FROM alumnos WHERE carnet = ?", (carnet_eliminar,))
+                                    if alumno := cursor.fetchone():
+                                        confirmacion = input(f"Esta seguro de que desea eliminar al alumno {alumno[1]} con carnet {carnet_eliminar}? (S/N): ").strip().upper()
+                                        if confirmacion == "S":
+                                            cursor.execute("DELETE FROM alumnos WHERE carnet = ?", (carnet_eliminar,))
+                                            conexion.commit()
+                                            print(f"Alumno con carnet {carnet_eliminar} eliminado exitosamente.")
+                                        else:
+                                            print("Eliminación cancelada.")
+                                    else:
+                                        print(f"Alumno con carnet {carnet_eliminar} no encontrado.")
+
                                 case "7":
                                     print("Regresando al menu principal... \n====================================================")
                                     break
