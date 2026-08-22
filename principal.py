@@ -26,6 +26,18 @@ def horarios():
         except ValueError:
             print("Error: Por favor, ingrese un indice valido.")
 
+def asignaturas():
+    print("Asignaturas disponibles: \n1- Programacion Estructurada \n2- Matematica IV \n3- Diseno de Bases de Datos \n4- Sistemas Operativos y Redes")
+    while True:
+        try:
+            asignatura = int(input("Seleccione el indice de la asignatura que desea: "))
+            if 1 <= asignatura <= 8:
+                return asignatura
+            else:
+                print("Error: Por favor, ingrese un numero entre 1 y 8.")
+        except ValueError:
+            print("Error: Por favor, ingrese un indice valido.")
+
 def registrar_alumno():
     nombre = input("Ingrese el nombre del alumno: ").title()
     while not nombre.replace(" ","").isalpha():
