@@ -31,10 +31,10 @@ def asignaturas():
     while True:
         try:
             asignatura = int(input("Seleccione el indice de la asignatura que desea: "))
-            if 1 <= asignatura <= 8:
+            if 1 <= asignatura <= 4:
                 return asignatura
             else:
-                print("Error: Por favor, ingrese un numero entre 1 y 8.")
+                print("Error: Por favor, ingrese un numero entre 1 y 4.")
         except ValueError:
             print("Error: Por favor, ingrese un indice valido.")
 
@@ -47,11 +47,12 @@ def registrar_alumno():
     edad = int(input("Ingrese la edad del alumno: "))
     carnet = input("Ingrese el carnet del alumno: ").upper()
     correo = input("Ingrese el correo del alumno: ")
-    curso = input("Ingrese el curso del alumno: ").title()
+    asignatura = asignaturas()
     horario = horarios()
+    asistencia = int(input("Ingrese el porcentaje de asistencia del alumno: "))
 
     try:
-        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, carrera, curso, horario) VALUES (?, ?, ?, ?, ?, ?, ?)", (carnet, nombre, edad, correo, curso, horario))
+        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, asignatura, horario, asistencia) VALUES (?, ?, ?, ?, ?, ?, ?)", (carnet, nombre, edad, correo, asignatura, horario, asistencia))
         conexion.commit()
         print(f"Alumno {nombre} registrado exitosamente!")
     except sqlite3.IntegrityError:
@@ -67,8 +68,9 @@ def mostrar_alumnos():
             print(f"Nombre: {alumno[1]}")
             print(f"Edad: {alumno[2]}")
             print(f"Correo: {alumno[3]}")
-            print(f"Curso: {alumno[4]}")
-            print(f"Horario: {alumno[5]}")
+            print(f"Asignatura: {asignaturas()}")
+            print(f"Horario: {horarios()}")
+            print(f"Asistencia: {alumno[6]}%")
     else:
         print("No hay alumnos registrados.")        
 
@@ -124,8 +126,8 @@ while True:
                                             suma_asistencia = 0
 
                                             for alumno in alumnos_curso:
-                                                nota = alumno[6]
-                                                asistencia = alumno[7]
+                                                nota = alumno[5]
+                                                asistencia = alumno[6]
 
                                                 suma_notas += nota
                                                 suma_asistencia += asistencia
@@ -139,11 +141,11 @@ while True:
 
                                                 print(f"\nCarnet: {alumno[0]}")
                                                 print(f"Nombre: {alumno[1]}")
-                                                print(f"Carrera: {alumno[4]}")
-                                                print(f"Horario: {alumno[5]}")
+                                                print(f"Asignatura: {asignaturas()}")
+                                                print(f"Horario: {horarios()}")
                                                 print(f"Nota: {nota}")
                                                 print(f"Asistencia: {asistencia}%")
-                                                print(f"State   : {state}")
+                                                print(f"Estado   : {state}")
 
                                             cantidad = len(alumnos_curso)
                                             promedio_nota = suma_notas / cantidad
@@ -160,7 +162,7 @@ while True:
                                 case "4":                            
                                     carnet_buscar = input("Ingrese el carnet del alumno a buscar: ").upper()
                                     if alumno := buscar_alumno(carnet_buscar):
-                                        print(f"Alumno con carnet {carnet_buscar} encontrado. \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nCurso: {alumno[4]} \nHorario: {alumno[5]} \nNota: {alumno[6]} \nAsistencia: {alumno[7]}%")
+                                        print(f"Alumno con carnet {carnet_buscar} encontrado. \nCarnet: {alumno[0]} \nNombre: {alumno[1]} \nCorreo: {alumno[2]} \nAsignatura: {asignaturas()} \nHorario: {horarios()} \nEdad: {alumno[5]} \nAsistencia: {alumno[6]}%")
                                     else:
                                         print(f"Alumno con carnet {carnet_buscar} no encontrado.")
 
@@ -186,9 +188,9 @@ while True:
                                         print(f"Clase cancelada. El total de clases ahora es: {total_clases}")
                                         print("Aprobando asistencia automaticamente a todos los alumnos por la clase cancelada...")
 
-                                    cursor.execute("UPDATE alumnos SET curso = ?", (nuevo_curso,))
+                                    cursor.execute("UPDATE alumnos SET asignatura = ?", (nuevo_curso,))
                                     conexion.commit()
-                                    print(f"Curso '{nuevo_curso}' administrado y actualizado exitosamente!")
+                                    print(f"Asignatura '{nuevo_curso}' administrada y actualizada exitosamente!")
 
                                 case "6":
                                     carnet_eliminar = input("Ingrese el carnet del alumno a eliminar: ").upper()
