@@ -7,6 +7,7 @@ import face_recognition
 
 conexion = sqlite3.connect("alumnos.db")
 cursor = conexion.cursor()
+
 cursor.execute('''CREATE TABLE IF NOT EXISTS alumnos (
                     carnet TEXT PRIMARY KEY UNIQUE NOT NULL,
                     nombre TEXT NOT NULL,
@@ -15,7 +16,7 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS alumnos (
                     asignatura TEXT NOT NULL,                    
                     horario INTEGER NOT NULL,                    
                     asistencia INTEGER NOT NULL,
-                    curso TEXT NOT NULL,
+                    curso TEXT NOT NULL DEFAULT 'General',
                     firma TEXT
                 )''')
 conexion.commit()
@@ -26,12 +27,12 @@ def clear_screen():
 
 def guardar_rostro(carnet_alumno, ruta_imagen="rostro.jpg"):
     try:
-        rostro = face_recognition.load_image_file(ruta_imagen)
-        encodings_rostro = json.dumps(rostro.tolist())
+        imagen = face_recognition.load_image_file(ruta_imagen)
+        encodings = face_recognition.face_encodings(imagen)
 
-        if len(encodings_rostro) > 0:
-            firma_rostro = encodings_rostro[0]
-            firma_texto = json.dumps(firma_rostro.tolist())
+        if len(encodings) > 0:
+            firma_rostro = encodings[0].tolist()
+            firma_texto = json.dumps(firma_rostro)
 
             cursor.execute(
                 "UPDATE alumnos SET firma = ? WHERE carnet = ?", (firma_texto, carnet_alumno)
@@ -56,12 +57,13 @@ def horarios():
             print("Error: Por favor, ingrese un indice valido.")
 
 def asignaturas():
+    lista = ["Programacion Estructurada", "Matematica IV", "Diseno de Bases de Datos", "Sistemas Operativos y Redes"]
     print("Asignaturas disponibles: \n1- Programacion Estructurada \n2- Matematica IV \n3- Diseno de Bases de Datos \n4- Sistemas Operativos y Redes")
     while True:
         try:
             asignatura = int(input("Seleccione el indice de la asignatura que desea: "))
             if 1 <= asignatura <= 4:
-                return asignatura
+                return lista[asignatura - 1]
             else:
                 print("Error: Por favor, ingrese un numero entre 1 y 4.")
         except ValueError:
@@ -79,9 +81,11 @@ def registrar_alumno():
     asignatura = asignaturas()
     horario = horarios()
     asistencia = int(input("Ingrese el porcentaje de asistencia del alumno: "))
+    curso = input("Ingrese la seccion o grupo del curso (ej. IDS1): ")
 
     try:
-        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, asignatura, horario, asistencia) VALUES (?, ?, ?, ?, ?, ?, ?)", (carnet, nombre, edad, correo, asignatura, horario, asistencia))
+        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, asignatura, horario, asistencia, curso) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
+                       (carnet, nombre, edad, correo, asignatura, horario, asistencia, curso))
         conexion.commit()
         print(f"Alumno {nombre} registrado exitosamente!")
     except sqlite3.IntegrityError:
@@ -121,13 +125,10 @@ def reporte_curso():
             suma_asistencia = 0
 
             for alumno in alumnos_curso:
-                nota = alumno[5]
                 asistencia = alumno[6]
-
-                suma_notas += nota
                 suma_asistencia += asistencia
 
-                if nota >= 6 and asistencia >= 80:
+                if asistencia >= 80:
                     state = "Aprobado"
                     aprobados += 1
                 else:
@@ -138,18 +139,15 @@ def reporte_curso():
                 print(f"Nombre: {alumno[1]}")
                 print(f"Asignatura: {alumno[4]}")
                 print(f"Horario: {alumno[5]}")
-                print(f"Nota: {alumno[5]}")
                 print(f"Asistencia: {alumno[6]}%")
                 print(f"Estado   : {state}")
 
             cantidad = len(alumnos_curso)
-            promedio_nota = suma_notas / cantidad
             promedio_asistencia = suma_asistencia / cantidad
 
             print(f"\nTotal de alumnos: {cantidad}")
             print(f"Alumnos aprobados: {aprobados}")
             print(f"Alumnos reprobados: {reprobados}")
-            print(f"Promedio del curso: {promedio_nota:.2f}")
             print(f"Promedio de asistencia: {promedio_asistencia:.2f}%")
     else:
         print("No hay cursos registrados.")     
@@ -170,7 +168,6 @@ while True:
         clear_screen()
         match menu:
             case 1:
-                
                 print("Ingresando como profesor... \n---------------------------------------------------------------------")
                 contra = input("Ingrese la contraseña: ")
                 if contra == "Catolica10":
@@ -178,74 +175,73 @@ while True:
                     clear_screen()
 
                     while True:               
-                    
-                            print("1-Registrar alumno \n2-Reporte de alumnos \n3-Reporte de curso \n4-Buscar alumno \n5-Administrar curso \n6-Eliminar alumno \n7-Regresar al menu principal")
-                            opcion = input("--------------------------------------------------------------------- \nSeleccione una opcion: ")
+                        print("1-Registrar alumno \n2-Reporte de alumnos \n3-Reporte de curso \n4-Buscar alumno \n5-Administrar curso \n6-Eliminar alumno \n7-Regresar al menu principal")
+                        opcion = input("--------------------------------------------------------------------- \nSeleccione una opcion: ")
             
-                            match opcion:
-                                case "1":
-                                    registrar_alumno()
-                                    clear_screen()
-                                case "2":
-                                    mostrar_alumnos()
-                                    clear_screen()
-                                case "3":
-                                    reporte_curso()
-                                    clear_screen()
-                                case "4":                            
-                                    carnet_buscar = input("Ingrese el carnet del alumno a buscar: ").upper()
-                                    if alumno := buscar_alumno(carnet_buscar):
-                                        print(f"Alumno con carnet {carnet_buscar} encontrado. \nCarnet: {alumno[0]} \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nAsignatura: {alumno[4]} \nHorario: {alumno[5]} \nAsistencia: {alumno[6]}%")
+                        match opcion:
+                            case "1":
+                                registrar_alumno()
+                                clear_screen()
+                            case "2":
+                                mostrar_alumnos()
+                                clear_screen()
+                            case "3":
+                                reporte_curso()
+                                clear_screen()
+                            case "4":                            
+                                carnet_buscar = input("Ingrese el carnet del alumno a buscar: ").upper()
+                                if alumno := buscar_alumno(carnet_buscar):
+                                    print(f"Alumno con carnet {carnet_buscar} encontrado. \nCarnet: {alumno[0]} \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nAsignatura: {alumno[4]} \nHorario: {alumno[5]} \nAsistencia: {alumno[6]}%")
+                                else:
+                                    print(f"Alumno con carnet {carnet_buscar} no encontrado.")
+                                clear_screen()
+
+                            case "5":
+                                print("Administrar curso... \n---------------------------------------------------------------------")
+                                nuevo_curso = input("Ingrese el nombre del curso: ")
+                                while not nuevo_curso.isalnum():
+                                    print("Error: El curso no debe tener caracteres especiales, solo numeros y letras.")
+                                    nuevo_curso = input("Ingrese el nombre del curso: ")                                    
+
+                                while True:
+                                    try:
+                                        total_clases = int(input("Defina la cantidad total de clases programadas: "))
+                                        if total_clases > 0:
+                                            break
+                                        print("Error: Debe ingresar un numero mayor a 0.")
+                                    except ValueError:
+                                        print("Error: Solo se permiten numeros enteros.")
+
+                                cancelar = input("Desea cancelar una clase hoy? (S/N): ").strip().upper()
+                                if cancelar == "S":
+                                    total_clases -= 1
+                                    print(f"Clase cancelada. El total de clases ahora es: {total_clases}")
+                                    print("Aprobando asistencia automaticamente a todos los alumnos por la clase cancelada...")
+
+                                cursor.execute("UPDATE alumnos SET asignatura = ?", (nuevo_curso,))
+                                conexion.commit()
+                                print(f"Asignatura '{nuevo_curso}' administrada y actualizada exitosamente!")
+                                clear_screen()
+
+                            case "6":
+                                carnet_eliminar = input("Ingrese el carnet del alumno a eliminar: ").upper()
+                                cursor.execute("SELECT * FROM alumnos WHERE carnet = ?", (carnet_eliminar,))
+                                if alumno := cursor.fetchone():
+                                    confirmacion = input(f"Esta seguro de que desea eliminar al alumno {alumno[1]} con carnet {carnet_eliminar}? (S/N): ").strip().upper()
+                                    if confirmacion == "S":
+                                        eliminar_alumno(carnet_eliminar)
                                     else:
-                                        print(f"Alumno con carnet {carnet_buscar} no encontrado.")
-                                    clear_screen()
+                                        print("Eliminación cancelada.")
+                                else:
+                                    print(f"Alumno con carnet {carnet_eliminar} no encontrado.")
+                                clear_screen()
 
-                                case "5":
-                                    print("Administrar curso... \n---------------------------------------------------------------------")
-                                    nuevo_curso = input("Ingrese el nombre del curso: ")
-                                    while not nuevo_curso.isalnum():
-                                        print("Error: El curso no debe tener caracteres especiales, solo numeros y letras.")
-                                        nuevo_curso = input("Ingrese el nombre del curso: ")                                    
-
-                                    while True:
-                                        try:
-                                            total_clases = int(input("Defina la cantidad total de clases programadas: "))
-                                            if total_clases > 0:
-                                                break
-                                            print("Error: Debe ingresar un numero mayor a 0.")
-                                        except ValueError:
-                                            print("Error: Solo se permiten numeros enteros.")
-
-                                    cancelar = input("Desea cancelar una clase hoy? (S/N): ").strip().upper()
-                                    if cancelar == "S":
-                                        total_clases -= 1
-                                        print(f"Clase cancelada. El total de clases ahora es: {total_clases}")
-                                        print("Aprobando asistencia automaticamente a todos los alumnos por la clase cancelada...")
-
-                                    cursor.execute("UPDATE alumnos SET asignatura = ?", (nuevo_curso,))
-                                    conexion.commit()
-                                    print(f"Asignatura '{nuevo_curso}' administrada y actualizada exitosamente!")
-                                    clear_screen()
-
-                                case "6":
-                                    carnet_eliminar = input("Ingrese el carnet del alumno a eliminar: ").upper()
-                                    cursor.execute("SELECT * FROM alumnos WHERE carnet = ?", (carnet_eliminar,))
-                                    if alumno := cursor.fetchone():
-                                        confirmacion = input(f"Esta seguro de que desea eliminar al alumno {alumno[1]} con carnet {carnet_eliminar}? (S/N): ").strip().upper()
-                                        if confirmacion == "S":
-                                            eliminar_alumno(carnet_eliminar)
-                                        else:
-                                            print("Eliminación cancelada.")
-                                    else:
-                                        print(f"Alumno con carnet {carnet_eliminar} no encontrado.")
-                                    clear_screen()
-
-                                case "7":
-                                    print("Regresando al menu principal... \n====================================================")
-                                    clear_screen()
-                                    break
-                                case _:
-                                        print("Opcion no valida. Por favor, seleccione un indice valido.")                        
+                            case "7":
+                                print("Regresando al menu principal... \n====================================================")
+                                clear_screen()
+                                break
+                            case _:
+                                print("Opcion no valida. Por favor, seleccione un indice valido.")                        
                 else:
                     print("Contraseña incorrecta. Intente nuevamente.")                                            
 
@@ -258,4 +254,4 @@ while True:
             case _:
                 print("Opcion no valida. Por favor, seleccione un indice valido.")
     except ValueError:
-            print("Error: Por favor, ingrese un numero valido.")            
+        print("Error: Por favor, ingrese un numero valido.")
