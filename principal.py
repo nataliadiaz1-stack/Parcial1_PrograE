@@ -4,6 +4,7 @@ import cv2
 import json
 import sqlite3
 import face_recognition
+import getpass
 
 conexion = sqlite3.connect("alumnos.db")
 cursor = conexion.cursor()
@@ -143,22 +144,29 @@ def asignaturas():
             print("Error: Por favor, ingrese un indice valido.")
 
 def registrar_alumno():
-    nombre = input("Ingrese el nombre del alumno: ").title()
+    nombre = input("Ingrese el nombre completo del alumno: ").title()
     while not nombre.replace(" ","").isalpha():
         print("Por favor, ingrese un nombre valido (solo letras)")
-        nombre = input("Ingrese el nombre del alumno: ").title()
-
-    edad = int(input("Ingrese la edad del alumno: "))
-    carnet = input("Ingrese el carnet del alumno: ").upper()
-    correo = input("Ingrese el correo del alumno: ")
+        nombre = input("Ingrese el nombre completo del alumno: ").title()
+    while True:
+        try:
+            edad = int(input("Ingrese la edad: "))
+            if edad < 16 or edad > 80:
+                print("Por favor, ingrese una edad valida (entre 16 y 80)")
+                edad = int(input("Ingrese la edad: "))
+            else:
+                break
+        except ValueError:
+            print("Error: Por favor, ingrese una edad valida.")
+    carnet = input("Ingrese el carnet: ").upper()
+    correo = input("Ingrese el correo: ")
     asignatura = asignaturas()
     horario = horarios()
-    asistencia = int(input("Ingrese el porcentaje de asistencia del alumno: "))
-    curso = input("Ingrese la seccion o grupo del curso (ej. IDS1): ")
+    curso = input("Ingrese la seccion o grupo de la asignatura: ").title()
 
     try:
-        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, asignatura, horario, asistencia, curso) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                       (carnet, nombre, edad, correo, asignatura, horario, asistencia, curso))
+        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, asignatura, horario, curso) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                       (carnet, nombre, edad, correo, asignatura, horario, curso,))
         conexion.commit()
         print(f"Alumno {nombre} registrado exitosamente!")
 
@@ -210,7 +218,7 @@ def reporte_curso():
         for curso in cursos:
             nombre_curso = curso[0]
 
-            print(f"\nCurso: {nombre_curso}")
+            print(f"Asignatura: {nombre_curso}")
 
             cursor.execute("SELECT * FROM alumnos WHERE curso = ?", (nombre_curso,))
             alumnos_curso = cursor.fetchall()
@@ -218,24 +226,6 @@ def reporte_curso():
             aprobados = 0
             reprobados = 0
             suma_asistencia = 0
-
-            for alumno in alumnos_curso:
-                asistencia = alumno[6]
-                suma_asistencia += asistencia
-
-                if asistencia >= 80:
-                    state = "Aprobado"
-                    aprobados += 1
-                else:
-                    state = "Reprobado"
-                    reprobados += 1
-
-                print(f"\nCarnet: {alumno[0]}")
-                print(f"Nombre: {alumno[1]}")
-                print(f"Asignatura: {alumno[4]}")
-                print(f"Horario: {alumno[5]}")
-                print(f"Asistencia: {alumno[6]}%")
-                print(f"Estado   : {state}")
 
             cantidad = len(alumnos_curso)
             promedio_asistencia = suma_asistencia / cantidad
@@ -264,7 +254,7 @@ while True:
         match menu:
             case 1:
                 print("Ingresando como profesor... \n---------------------------------------------------------------------")
-                contra = input("Ingrese la contraseña: ")
+                contra = getpass.getpass("Ingrese la contraseña: ")
                 if contra == "Catolica10":
                     print("Contraseña correcta. Accediendo al sistema... \n==================================================== \nBienvenido ingeniero Erazo! \n====================================================")
                     clear_screen()
@@ -329,6 +319,7 @@ while True:
                                     confirmacion = input(f"Esta seguro de que desea eliminar al alumno {alumno[1]} con carnet {carnet_eliminar}? (S/N): ").strip().upper()
                                     if confirmacion == "S":
                                         eliminar_alumno(carnet_eliminar)
+                                        print(f"Alumno con carnet {carnet_eliminar} eliminado exitosamente.")
                                     else:
                                         print("Eliminación cancelada.")
                                 else:
