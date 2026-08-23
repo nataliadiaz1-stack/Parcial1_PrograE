@@ -25,24 +25,97 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
     time.sleep(1)
 
-def guardar_rostro(carnet_alumno, ruta_imagen="rostro.jpg"):
+def guardar_rostro_directo(carnet_alumno, frame_bgr):
     try:
-        imagen = face_recognition.load_image_file(ruta_imagen)
-        encodings = face_recognition.face_encodings(imagen)
+        rgb_frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        encodings = face_recognition.face_encodings(rgb_frame)
 
         if len(encodings) > 0:
-            firma_rostro = encodings[0].tolist()
-            firma_texto = json.dumps(firma_rostro)
+            firma_vector = encodings[0].tolist()
+            firma_texto = json.dumps(firma_vector)
 
             cursor.execute(
                 "UPDATE alumnos SET firma = ? WHERE carnet = ?", (firma_texto, carnet_alumno)
             )
             conexion.commit()
-            print(f"Rostro del alumno con carnet {carnet_alumno} guardado exitosamente.")
+            print(f"\n¡ÉXITO! Rostro del alumno ({carnet_alumno}) procesado y guardado en la base de datos.")
+            input("\nPresione ENTER para continuar...")
         else:
-            print("No se pudo detectar un rostro en la imagen proporcionada.")
+            print("\nADVERTENCIA: No se detectó ningún rostro. Asegúrese de tener buena iluminación e intente de nuevo.")
+            input("\nPresione ENTER para continuar...")
     except Exception as e:
-        print(f"Error al guardar el rostro: {e}")
+        print(f"\nError al guardar el rostro: {e}")
+        input("\nPresione ENTER para continuar...")
+
+def tomar_asistencia_por_rostro():
+    cursor.execute("SELECT carnet, nombre, firma FROM alumnos WHERE firma IS NOT NULL AND firma != ''")
+    registros = cursor.fetchall()
+
+    if not registros:
+        print("\nNo hay alumnos con firma facial registrada en el sistema.")
+        input("\nPresione ENTER para continuar...")
+        return
+
+    rostros_conocidos = []
+    carnets_conocidos = []
+    nombres_conocidos = []
+
+    for carnet, nombre, firma_texto in registros:
+        try:
+            vector_rostro = json.loads(firma_texto)
+            rostros_conocidos.append(vector_rostro)
+            carnets_conocidos.append(carnet)
+            nombres_conocidos.append(nombre)
+        except Exception:
+            continue
+
+    cap = cv2.VideoCapture(0)
+    print("Iniciando cámara... Colóquese frente al lente y presione 'ESPACIO' para verificar su identidad.")
+
+    frame_capturado = None
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Error al acceder a la cámara.")
+            break
+
+        cv2.imshow("Verificacion de Asistencia - Presione ESPACIO", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord(' '):
+            frame_capturado = frame
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    if frame_capturado is not None:
+        try:
+            rgb_frame = cv2.cvtColor(frame_capturado, cv2.COLOR_BGR2RGB)
+            encodings_captura = face_recognition.face_encodings(rgb_frame)
+
+            if len(encodings_captura) > 0:
+                encoding_desconocido = encodings_captura[0]
+                coincidencias = face_recognition.compare_faces(rostros_conocidos, encoding_desconocido, tolerance=0.5)
+
+                if True in coincidencias:
+                    indice_coincidencia = coincidencias.index(True)
+                    carnet_detectado = carnets_conocidos[indice_coincidencia]
+                    nombre_detectado = nombres_conocidos[indice_coincidencia]
+
+                    print(f"\n¡Bienvenido {nombre_detectado} ({carnet_detectado})!")
+                    print("Asistencia registrada exitosamente en el sistema.")
+
+                    cursor.execute("UPDATE alumnos SET asistencia = asistencia + 1 WHERE carnet = ?", (carnet_detectado,))
+                    conexion.commit()
+                else:
+                    print("\nRostro no reconocido. No se encontró coincidencia en la base de datos.")
+            else:
+                print("\nNo se detectó ningún rostro en la imagen capturada.")
+
+        except Exception as e:
+            print(f"Error durante el proceso de verificación: {e}")
+            
+    input("\nPresione ENTER para continuar...")
 
 def horarios():
     print("Horarios disponibles: \n1- 6:45 am a 8:25 am \n2- 8:30 am a 10:10 am \n3- 10:15 am a 11:45 am \n4- 11:50 am a 1:00 pm \n5- 1:00 pm a 2:30 pm \n6- 2:30 pm a 4:00 pm \n7- 4:00 pm a 5:30 pm \n8- 5:30 pm a 7:00 pm")
@@ -88,8 +161,30 @@ def registrar_alumno():
                        (carnet, nombre, edad, correo, asignatura, horario, asistencia, curso))
         conexion.commit()
         print(f"Alumno {nombre} registrado exitosamente!")
+
+        tomar_foto = input("¿Desea tomar la foto del rostro ahora con la cámara? (S/N): ").strip().upper()
+        if tomar_foto == "S":
+            cap = cv2.VideoCapture(0)
+            print("Presione la tecla 'ESPACIO' para tomar la foto...")
+            frame_capturado = None
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                cv2.imshow("Registro Facial - Presione ESPACIO", frame)
+                if cv2.waitKey(1) & 0xFF == ord(' '):
+                    frame_capturado = frame
+                    break
+            
+            cap.release()
+            cv2.destroyAllWindows()
+
+            if frame_capturado is not None:
+                guardar_rostro_directo(carnet, frame_capturado)
+
     except sqlite3.IntegrityError:
-        print(f"Error: El carnet {carnet} ya está registrado. Por favor, ingrese un carnet único.")
+        print(f"Error: El carnet {carnet} ya está registrado.")
 
 def mostrar_alumnos():
     cursor.execute("SELECT * FROM alumnos")
@@ -184,9 +279,11 @@ while True:
                                 clear_screen()
                             case "2":
                                 mostrar_alumnos()
+                                input("\nPresione ENTER para regresar...")
                                 clear_screen()
                             case "3":
                                 reporte_curso()
+                                input("\nPresione ENTER para regresar...")
                                 clear_screen()
                             case "4":                            
                                 carnet_buscar = input("Ingrese el carnet del alumno a buscar: ").upper()
@@ -194,6 +291,7 @@ while True:
                                     print(f"Alumno con carnet {carnet_buscar} encontrado. \nCarnet: {alumno[0]} \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nAsignatura: {alumno[4]} \nHorario: {alumno[5]} \nAsistencia: {alumno[6]}%")
                                 else:
                                     print(f"Alumno con carnet {carnet_buscar} no encontrado.")
+                                input("\nPresione ENTER para regresar...")
                                 clear_screen()
 
                             case "5":
@@ -221,6 +319,7 @@ while True:
                                 cursor.execute("UPDATE alumnos SET asignatura = ?", (nuevo_curso,))
                                 conexion.commit()
                                 print(f"Asignatura '{nuevo_curso}' administrada y actualizada exitosamente!")
+                                input("\nPresione ENTER para regresar...")
                                 clear_screen()
 
                             case "6":
@@ -234,6 +333,7 @@ while True:
                                         print("Eliminación cancelada.")
                                 else:
                                     print(f"Alumno con carnet {carnet_eliminar} no encontrado.")
+                                input("\nPresione ENTER para regresar...")
                                 clear_screen()
 
                             case "7":
@@ -247,6 +347,8 @@ while True:
 
             case 2:
                 print("Ingresando como alumno...")
+                tomar_asistencia_por_rostro()
+                clear_screen()
             case 3:
                 print("Saliendo...")
                 conexion.close()
