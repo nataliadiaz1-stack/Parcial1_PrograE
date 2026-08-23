@@ -1,25 +1,54 @@
 import os
 import time
+import cv2
+import json
 import sqlite3
-from unittest import case
+import face_recognition
+
 conexion = sqlite3.connect("alumnos.db")
 cursor = conexion.cursor()
-
 cursor.execute('''CREATE TABLE IF NOT EXISTS alumnos (
                     carnet TEXT PRIMARY KEY UNIQUE NOT NULL,
                     nombre TEXT NOT NULL,
                     edad INTEGER NOT NULL,
                     correo TEXT NOT NULL,
-                    carrera TEXT NOT NULL,
-                    asignatura TEXT NOT NULL,
+                    asignatura TEXT NOT NULL,                    
+                    horario INTEGER NOT NULL,                    
+                    asistencia INTEGER NOT NULL,
                     curso TEXT NOT NULL,
-                    horario INTEGER NOT NULL
+                    firma TEXT
                 )''')
 conexion.commit()
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
     time.sleep(1)
+
+def guardar_rostro(carnet_alumno, ruta_imagen="rostro.jpg"):
+    try:
+        rostro = face_recognition.load_image_file(ruta_imagen)
+        encodings_rostro = json.dumps(rostro.tolist())
+
+        if len(encodings_rostro) > 0:
+            rostro = encodgings_rostro[0]
+            cursor.execute(
+                "UPDATE alumnos SET firma = ? WHERE carnet = ?", (firma_texto, carnet_alumno)
+            )
+            conexion.commit()
+            print(f"Rostro del alumno con carnet {carnet_alumno} guardado exitosamente.")
+        else:
+            print("No se pudo detectar un rostro en la imagen proporcionada.")
+    except Exception as e:
+        print(f"Error al guardar el rostro: {e}")
+
+rostro = face_recognition.load_image_file("rostro.jpg")
+encodings_rostro = face_recognition.face_encodings(rostro)
+
+firma_texto = json.dumps(encodings_rostro.tolist())
+
+cursor.execute(
+    "UPDATE alumnos SET firma = ? WHERE carnet = ?", (firma_texto, carnet_alumno)
+)
 
 def horarios():
     print("Horarios disponibles: \n1- 6:45 am a 8:25 am \n2- 8:30 am a 10:10 am \n3- 10:15 am a 11:45 am \n4- 11:50 am a 1:00 pm \n5- 1:00 pm a 2:30 pm \n6- 2:30 pm a 4:00 pm \n7- 4:00 pm a 5:30 pm \n8- 5:30 pm a 7:00 pm")
@@ -236,5 +265,4 @@ while True:
             case _:
                 print("Opcion no valida. Por favor, seleccione un indice valido.")
     except ValueError:
-            print("Error: Por favor, ingrese un numero valido.")
-            
+            print("Error: Por favor, ingrese un numero valido.")            
