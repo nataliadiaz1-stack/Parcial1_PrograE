@@ -30,7 +30,9 @@ def guardar_rostro(carnet_alumno, ruta_imagen="rostro.jpg"):
         encodings_rostro = json.dumps(rostro.tolist())
 
         if len(encodings_rostro) > 0:
-            rostro = encodgings_rostro[0]
+            firma_rostro = encodings_rostro[0]
+            firma_texto = json.dumps(firma_rostro.tolist())
+
             cursor.execute(
                 "UPDATE alumnos SET firma = ? WHERE carnet = ?", (firma_texto, carnet_alumno)
             )
@@ -40,15 +42,6 @@ def guardar_rostro(carnet_alumno, ruta_imagen="rostro.jpg"):
             print("No se pudo detectar un rostro en la imagen proporcionada.")
     except Exception as e:
         print(f"Error al guardar el rostro: {e}")
-
-rostro = face_recognition.load_image_file("rostro.jpg")
-encodings_rostro = face_recognition.face_encodings(rostro)
-
-firma_texto = json.dumps(encodings_rostro.tolist())
-
-cursor.execute(
-    "UPDATE alumnos SET firma = ? WHERE carnet = ?", (firma_texto, carnet_alumno)
-)
 
 def horarios():
     print("Horarios disponibles: \n1- 6:45 am a 8:25 am \n2- 8:30 am a 10:10 am \n3- 10:15 am a 11:45 am \n4- 11:50 am a 1:00 pm \n5- 1:00 pm a 2:30 pm \n6- 2:30 pm a 4:00 pm \n7- 4:00 pm a 5:30 pm \n8- 5:30 pm a 7:00 pm")
