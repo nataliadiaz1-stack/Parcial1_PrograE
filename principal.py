@@ -31,10 +31,10 @@ def asignaturas():
     while True:
         try:
             asignatura = int(input("Seleccione el indice de la asignatura que desea: "))
-            if 1 <= asignatura <= 8:
+            if 1 <= asignatura <= 4:
                 return asignatura
             else:
-                print("Error: Por favor, ingrese un numero entre 1 y 8.")
+                print("Error: Por favor, ingrese un numero entre 1 y 4.")
         except ValueError:
             print("Error: Por favor, ingrese un indice valido.")
 
@@ -47,11 +47,12 @@ def registrar_alumno():
     edad = int(input("Ingrese la edad del alumno: "))
     carnet = input("Ingrese el carnet del alumno: ").upper()
     correo = input("Ingrese el correo del alumno: ")
-    curso = input("Ingrese el curso del alumno: ").title()
+    asignatura = asignaturas()
     horario = horarios()
+    asistencia = int(input("Ingrese el porcentaje de asistencia del alumno: "))
 
     try:
-        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, carrera, curso, horario) VALUES (?, ?, ?, ?, ?, ?, ?)", (carnet, nombre, edad, correo, curso, horario))
+        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, asignatura, horario, asistencia) VALUES (?, ?, ?, ?, ?, ?, ?)", (carnet, nombre, edad, correo, asignatura, horario, asistencia))
         conexion.commit()
         print(f"Alumno {nombre} registrado exitosamente!")
     except sqlite3.IntegrityError:
@@ -67,10 +68,62 @@ def mostrar_alumnos():
             print(f"Nombre: {alumno[1]}")
             print(f"Edad: {alumno[2]}")
             print(f"Correo: {alumno[3]}")
-            print(f"Curso: {alumno[4]}")
+            print(f"Asignatura: {alumno[4]}")
             print(f"Horario: {alumno[5]}")
+            print(f"Asistencia: {alumno[6]}%")
     else:
-        print("No hay alumnos registrados.")        
+        print("No hay alumnos registrados.")   
+
+def reporte_curso():
+    cursor.execute("SELECT DISTINCT curso FROM alumnos")
+    cursos = cursor.fetchall()
+
+    if cursos:
+        for curso in cursos:
+            nombre_curso = curso[0]
+
+            print(f"\nCurso: {nombre_curso}")
+
+            cursor.execute("SELECT * FROM alumnos WHERE curso = ?", (nombre_curso,))
+            alumnos_curso = cursor.fetchall()
+
+            aprobados = 0
+            reprobados = 0
+            suma_asistencia = 0
+
+            for alumno in alumnos_curso:
+                nota = alumno[5]
+                asistencia = alumno[6]
+
+                suma_notas += nota
+                suma_asistencia += asistencia
+
+                if nota >= 6 and asistencia >= 80:
+                    state = "Aprobado"
+                    aprobados += 1
+                else:
+                    state = "Reprobado"
+                    reprobados += 1
+
+                print(f"\nCarnet: {alumno[0]}")
+                print(f"Nombre: {alumno[1]}")
+                print(f"Asignatura: {alumno[4]}")
+                print(f"Horario: {alumno[5]}")
+                print(f"Nota: {alumno[5]}")
+                print(f"Asistencia: {alumno[6]}%")
+                print(f"Estado   : {state}")
+
+            cantidad = len(alumnos_curso)
+            promedio_nota = suma_notas / cantidad
+            promedio_asistencia = suma_asistencia / cantidad
+
+            print(f"\nTotal de alumnos: {cantidad}")
+            print(f"Alumnos aprobados: {aprobados}")
+            print(f"Alumnos reprobados: {reprobados}")
+            print(f"Promedio del curso: {promedio_nota:.2f}")
+            print(f"Promedio de asistencia: {promedio_asistencia:.2f}%")
+    else:
+        print("No hay cursos registrados.")     
 
 def buscar_alumno(carnet):
     cursor.execute("SELECT * FROM alumnos WHERE carnet = ?", (carnet,))
@@ -104,63 +157,11 @@ while True:
                                 case "2":
                                     mostrar_alumnos()
                                 case "3":
-                                    print("Mostrando reporte de curso...")
-
-                                    cursor.execute("SELECT DISTINCT curso FROM alumnos")
-                                    cursos = cursor.fetchall()
-
-                                    if cursos:
-                                        for curso in cursos:
-                                            nombre_curso = curso[0]
-
-                                            print(f"\nCurso: {nombre_curso}")
-
-                                            cursor.execute("SELECT * FROM alumnos WHERE curso = ?", (nombre_curso,))
-                                            alumnos_curso = cursor.fetchall()
-
-                                            aprobados = 0
-                                            reprobados = 0
-                                            suma_notas = 0
-                                            suma_asistencia = 0
-
-                                            for alumno in alumnos_curso:
-                                                nota = alumno[6]
-                                                asistencia = alumno[7]
-
-                                                suma_notas += nota
-                                                suma_asistencia += asistencia
-
-                                                if nota >= 6 and asistencia >= 80:
-                                                    state = "Aprobado"
-                                                    aprobados += 1
-                                                else:
-                                                    state = "Reprobado"
-                                                    reprobados += 1
-
-                                                print(f"\nCarnet: {alumno[0]}")
-                                                print(f"Nombre: {alumno[1]}")
-                                                print(f"Carrera: {alumno[4]}")
-                                                print(f"Horario: {alumno[5]}")
-                                                print(f"Nota: {nota}")
-                                                print(f"Asistencia: {asistencia}%")
-                                                print(f"State   : {state}")
-
-                                            cantidad = len(alumnos_curso)
-                                            promedio_nota = suma_notas / cantidad
-                                            promedio_asistencia = suma_asistencia / cantidad
-
-                                            print(f"\nTotal de alumnos: {cantidad}")
-                                            print(f"Alumnos aprobados: {aprobados}")
-                                            print(f"Alumnos reprobados: {reprobados}")
-                                            print(f"Promedio del curso: {promedio_nota:.2f}")
-                                            print(f"Promedio de asistencia: {promedio_asistencia:.2f}%")
-                                    else:
-                                        print("No hay cursos registrados.")
-
+                                    reporte_curso()
                                 case "4":                            
                                     carnet_buscar = input("Ingrese el carnet del alumno a buscar: ").upper()
                                     if alumno := buscar_alumno(carnet_buscar):
-                                        print(f"Alumno con carnet {carnet_buscar} encontrado. \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nCurso: {alumno[4]} \nHorario: {alumno[5]} \nNota: {alumno[6]} \nAsistencia: {alumno[7]}%")
+                                        print(f"Alumno con carnet {carnet_buscar} encontrado. \nCarnet: {alumno[0]} \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nAsignatura: {alumno[4]} \nHorario: {alumno[5]} \nAsistencia: {alumno[6]}%")
                                     else:
                                         print(f"Alumno con carnet {carnet_buscar} no encontrado.")
 
@@ -186,9 +187,9 @@ while True:
                                         print(f"Clase cancelada. El total de clases ahora es: {total_clases}")
                                         print("Aprobando asistencia automaticamente a todos los alumnos por la clase cancelada...")
 
-                                    cursor.execute("UPDATE alumnos SET curso = ?", (nuevo_curso,))
+                                    cursor.execute("UPDATE alumnos SET asignatura = ?", (nuevo_curso,))
                                     conexion.commit()
-                                    print(f"Curso '{nuevo_curso}' administrado y actualizado exitosamente!")
+                                    print(f"Asignatura '{nuevo_curso}' administrada y actualizada exitosamente!")
 
                                 case "6":
                                     carnet_eliminar = input("Ingrese el carnet del alumno a eliminar: ").upper()
