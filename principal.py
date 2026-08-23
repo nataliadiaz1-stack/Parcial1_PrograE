@@ -1,3 +1,5 @@
+import os
+import time
 import sqlite3
 from unittest import case
 conexion = sqlite3.connect("alumnos.db")
@@ -14,6 +16,10 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS alumnos (
                     horario INTEGER NOT NULL
                 )''')
 conexion.commit()
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+    time.sleep(1)
 
 def horarios():
     print("Horarios disponibles: \n1- 6:45 am a 8:25 am \n2- 8:30 am a 10:10 am \n3- 10:15 am a 11:45 am \n4- 11:50 am a 1:00 pm \n5- 1:00 pm a 2:30 pm \n6- 2:30 pm a 4:00 pm \n7- 4:00 pm a 5:30 pm \n8- 5:30 pm a 7:00 pm")
@@ -139,6 +145,7 @@ while True:
         print("Bienvenido al administrador para Ingenieria en Desarrollo de Software! \n1-Ingresar como profesor \n2-Ingresar como alumno \n3-Salir")
 
         menu = int(input("Seleccione el indice de la opcion que desea realizar: "))
+        clear_screen()
         match menu:
             case 1:
                 
@@ -146,6 +153,7 @@ while True:
                 contra = input("Ingrese la contraseña: ")
                 if contra == "Catolica10":
                     print("Contraseña correcta. Accediendo al sistema... \n==================================================== \nBienvenido ingeniero Erazo! \n====================================================")
+                    clear_screen()
 
                     while True:               
                     
@@ -155,23 +163,27 @@ while True:
                             match opcion:
                                 case "1":
                                     registrar_alumno()
+                                    clear_screen()
                                 case "2":
                                     mostrar_alumnos()
+                                    clear_screen()
                                 case "3":
                                     reporte_curso()
+                                    clear_screen()
                                 case "4":                            
                                     carnet_buscar = input("Ingrese el carnet del alumno a buscar: ").upper()
                                     if alumno := buscar_alumno(carnet_buscar):
                                         print(f"Alumno con carnet {carnet_buscar} encontrado. \nCarnet: {alumno[0]} \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nAsignatura: {alumno[4]} \nHorario: {alumno[5]} \nAsistencia: {alumno[6]}%")
                                     else:
                                         print(f"Alumno con carnet {carnet_buscar} no encontrado.")
+                                    clear_screen()
 
                                 case "5":
                                     print("Administrar curso... \n---------------------------------------------------------------------")
                                     nuevo_curso = input("Ingrese el nombre del curso: ")
                                     while not nuevo_curso.isalnum():
                                         print("Error: El curso no debe tener caracteres especiales, solo numeros y letras.")
-                                        nuevo_curso = input("Ingrese el nombre del curso: ")
+                                        nuevo_curso = input("Ingrese el nombre del curso: ")                                    
 
                                     while True:
                                         try:
@@ -191,6 +203,7 @@ while True:
                                     cursor.execute("UPDATE alumnos SET asignatura = ?", (nuevo_curso,))
                                     conexion.commit()
                                     print(f"Asignatura '{nuevo_curso}' administrada y actualizada exitosamente!")
+                                    clear_screen()
 
                                 case "6":
                                     carnet_eliminar = input("Ingrese el carnet del alumno a eliminar: ").upper()
@@ -203,9 +216,11 @@ while True:
                                             print("Eliminación cancelada.")
                                     else:
                                         print(f"Alumno con carnet {carnet_eliminar} no encontrado.")
+                                    clear_screen()
 
                                 case "7":
                                     print("Regresando al menu principal... \n====================================================")
+                                    clear_screen()
                                     break
                                 case _:
                                         print("Opcion no valida. Por favor, seleccione un indice valido.")                        
