@@ -9,6 +9,7 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS alumnos (
                     edad INTEGER NOT NULL,
                     correo TEXT NOT NULL,
                     carrera TEXT NOT NULL,
+                    asignatura TEXT NOT NULL,
                     curso TEXT NOT NULL,
                     horario INTEGER NOT NULL
                 )''')
