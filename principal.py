@@ -16,7 +16,6 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS alumnos (
                     nombre TEXT NOT NULL,
                     edad INTEGER NOT NULL,
                     correo TEXT NOT NULL,
-                    asistencia INTEGER NOT NULL DEFAULT 0,
                     firma TEXT
                 )''')
 
@@ -26,6 +25,7 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS matriculas (
                     asignatura TEXT NOT NULL,
                     horario_id INTEGER NOT NULL,
                     seccion TEXT NOT NULL,
+                    asistencia INTEGER NOT NULL DEFAULT 0,
                     FOREIGN KEY (carnet_alumno) REFERENCES alumnos (carnet) ON DELETE CASCADE
                 )''')
 conexion.commit()
@@ -50,7 +50,6 @@ def validar_correo(correo):
     return re.match(patron, correo) is not None
 
 def abrir_camara():
-    # Intenta con DirectShow para evitar congelamientos en Windows
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     if not cap.isOpened():
         cap = cv2.VideoCapture(0)
@@ -77,6 +76,8 @@ def guardar_rostro_directo(carnet_alumno, frame_bgr):
     input("\nPresione ENTER para continuar...")
 
 def tomar_asistencia_por_rostro():
+    asig_actual = seleccionar_asignatura()
+
     cursor.execute("SELECT carnet, nombre, firma FROM alumnos WHERE firma IS NOT NULL AND firma != ''")
     registros = cursor.fetchall()
 
@@ -102,6 +103,7 @@ def tomar_asistencia_por_rostro():
         input("\nPresione ENTER para continuar...")
         return
 
+    print(f"\nTomando asistencia para: {asig_actual}")
     print("Iniciando cámara... Colóquese frente al lente y presione 'ESPACIO' para verificar asistencia.")
 
     frame_capturado = None
@@ -134,11 +136,22 @@ def tomar_asistencia_por_rostro():
                     carnet_detectado = carnets_conocidos[indice]
                     nombre_detectado = nombres_conocidos[indice]
 
-                    print(f"\n¡Bienvenido {nombre_detectado} ({carnet_detectado})!")
-                    print("Asistencia registrada exitosamente.")
+                    cursor.execute(
+                        "SELECT id FROM matriculas WHERE carnet_alumno = ? AND asignatura = ?",
+                        (carnet_detectado, asig_actual)
+                    )
+                    matricula = cursor.fetchone()
 
-                    cursor.execute("UPDATE alumnos SET asistencia = asistencia + 1 WHERE carnet = ?", (carnet_detectado,))
-                    conexion.commit()
+                    if matricula:
+                        cursor.execute(
+                            "UPDATE matriculas SET asistencia = asistencia + 1 WHERE carnet_alumno = ? AND asignatura = ?",
+                            (carnet_detectado, asig_actual)
+                        )
+                        conexion.commit()
+                        print(f"\n¡Bienvenido {nombre_detectado} ({carnet_detectado})!")
+                        print(f"Asistencia registrada exitosamente en {asig_actual}.")
+                    else:
+                        print(f"\nEl alumno {nombre_detectado} no está inscrito en {asig_actual}.")
                 else:
                     print("\nRostro no reconocido en el sistema.")
             else:
@@ -199,18 +212,37 @@ def registrar_alumno():
 
     try:
         cursor.execute(
-            "INSERT INTO alumnos (carnet, nombre, edad, correo, asistencia) VALUES (?, ?, ?, ?, 0)",
+            "INSERT INTO alumnos (carnet, nombre, edad, correo) VALUES (?, ?, ?, ?)",
             (carnet, nombre, edad, correo)
         )
         conexion.commit()
 
         while True:
             asig = seleccionar_asignatura()
+            
+            cursor.execute("SELECT id FROM matriculas WHERE carnet_alumno = ? AND asignatura = ?", (carnet, asig))
+            if cursor.fetchone():
+                print(f"Error: El alumno ya tiene inscrita la materia '{asig}'.")
+                otra = input("¿Desea intentar inscribir otra materia a este alumno? (S/N): ").strip().upper()
+                if otra != 'S':
+                    break
+                continue
+
             horario_id = seleccionar_horario()
+
+            cursor.execute("SELECT asignatura FROM matriculas WHERE carnet_alumno = ? AND horario_id = ?", (carnet, horario_id))
+            materia_existente = cursor.fetchone()
+            if materia_existente:
+                print(f"Error: El horario seleccionado se traslapa con la materia '{materia_existente[0]}'.")
+                otra = input("¿Desea intentar inscribir otra materia a este alumno? (S/N): ").strip().upper()
+                if otra != 'S':
+                    break
+                continue
+
             seccion = input("Ingrese la sección/grupo de la materia: ").title()
 
             cursor.execute(
-                "INSERT INTO matriculas (carnet_alumno, asignatura, horario_id, seccion) VALUES (?, ?, ?, ?)",
+                "INSERT INTO matriculas (carnet_alumno, asignatura, horario_id, seccion, asistencia) VALUES (?, ?, ?, ?, 0)",
                 (carnet, asig, horario_id, seccion)
             )
             conexion.commit()
@@ -249,7 +281,7 @@ def registrar_alumno():
         input("\nPresione ENTER para continuar...")
 
 def mostrar_alumnos():
-    cursor.execute("SELECT carnet, nombre, edad, correo, asistencia FROM alumnos")
+    cursor.execute("SELECT carnet, nombre, edad, correo FROM alumnos")
     alumnos = cursor.fetchall()
 
     if alumnos:
@@ -257,13 +289,12 @@ def mostrar_alumnos():
             print(f"\nCarnet: {al[0]}")
             print(f"Nombre: {al[1]} | Edad: {al[2]}")
             print(f"Correo: {al[3]}")
-            print(f"Asistencias registradas: {al[4]}")
             
-            cursor.execute("SELECT asignatura, horario_id, seccion FROM matriculas WHERE carnet_alumno = ?", (al[0],))
+            cursor.execute("SELECT asignatura, horario_id, seccion, asistencia FROM matriculas WHERE carnet_alumno = ?", (al[0],))
             mats = cursor.fetchall()
             print("Materias inscritas:")
             for m in mats:
-                print(f"  - {m[0]} | Sección: {m[2]} | Horario: {DICCIONARIO_HORARIOS.get(m[1], 'N/A')}")
+                print(f"  - {m[0]} | Sección: {m[2]} | Horario: {DICCIONARIO_HORARIOS.get(m[1], 'N/A')} | Asistencias: {m[3]}")
             print("-" * 50)
     else:
         print("No hay alumnos registrados.")
@@ -282,7 +313,7 @@ def reporte_curso():
         print("No hay materias inscritas en el sistema.")
 
 def buscar_alumno(carnet):
-    cursor.execute("SELECT carnet, nombre, edad, correo, asistencia FROM alumnos WHERE carnet = ?", (carnet,))
+    cursor.execute("SELECT carnet, nombre, edad, correo FROM alumnos WHERE carnet = ?", (carnet,))
     return cursor.fetchone()
 
 def eliminar_alumno(carnet):
@@ -340,24 +371,24 @@ while True:
                         carnet_b = input("Ingrese el carnet a buscar: ").upper()
                         al = buscar_alumno(carnet_b)
                         if al:
-                            print(f"\nCarnet: {al[0]}\nNombre: {al[1]}\nEdad: {al[2]}\nCorreo: {al[3]}\nAsistencias: {al[4]}")
-                            cursor.execute("SELECT asignatura, horario_id, seccion FROM matriculas WHERE carnet_alumno = ?", (al[0],))
+                            print(f"\nCarnet: {al[0]}\nNombre: {al[1]}\nEdad: {al[2]}\nCorreo: {al[3]}")
+                            cursor.execute("SELECT asignatura, horario_id, seccion, asistencia FROM matriculas WHERE carnet_alumno = ?", (al[0],))
                             mats = cursor.fetchall()
                             print("Materias:")
                             for m in mats:
-                                print(f"  - {m[0]} ({m[2]}) en horario {DICCIONARIO_HORARIOS.get(m[1])}")
+                                print(f"  - {m[0]} ({m[2]}) en horario {DICCIONARIO_HORARIOS.get(m[1])} | Asistencias: {m[3]}")
                         else:
                             print("Alumno no encontrado.")
                         input("\nPresione ENTER para regresar...")
                         clear_screen()
                     elif opcion == "5":
                         print("--- Administrar Curso ---")
-                        nuevo_curso = input("Ingrese el nombre de la asignatura a modificar/crear: ")
-                        cancelar = input("¿Desea justificar asistencia general para una clase? (S/N): ").strip().upper()
+                        asig_justificar = seleccionar_asignatura()
+                        cancelar = input(f"¿Desea justificar asistencia general para {asig_justificar}? (S/N): ").strip().upper()
                         if cancelar == "S":
-                            cursor.execute("UPDATE alumnos SET asistencia = asistencia + 1")
+                            cursor.execute("UPDATE matriculas SET asistencia = asistencia + 1 WHERE asignatura = ?", (asig_justificar,))
                             conexion.commit()
-                            print("Asistencia incrementada a todos los alumnos.")
+                            print(f"Asistencia incrementada a los alumnos inscritos en {asig_justificar}.")
                         input("\nPresione ENTER para regresar...")
                         clear_screen()
                     elif opcion == "6":
