@@ -1,10 +1,12 @@
 import os
 import time
+import re
 import cv2
 import json
 import sqlite3
 import face_recognition
 import getpass
+import subprocess
 
 conexion = sqlite3.connect("alumnos.db")
 cursor = conexion.cursor()
@@ -14,17 +16,45 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS alumnos (
                     nombre TEXT NOT NULL,
                     edad INTEGER NOT NULL,
                     correo TEXT NOT NULL,
-                    asignatura TEXT NOT NULL,                    
-                    horario INTEGER NOT NULL,                    
-                    asistencia INTEGER NOT NULL,
-                    curso TEXT NOT NULL DEFAULT 'General',
+                    asistencia INTEGER NOT NULL DEFAULT 0,
                     firma TEXT
+                )''')
+
+cursor.execute('''CREATE TABLE IF NOT EXISTS matriculas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    carnet_alumno TEXT NOT NULL,
+                    asignatura TEXT NOT NULL,
+                    horario_id INTEGER NOT NULL,
+                    seccion TEXT NOT NULL,
+                    FOREIGN KEY (carnet_alumno) REFERENCES alumnos (carnet) ON DELETE CASCADE
                 )''')
 conexion.commit()
 
+DICCIONARIO_HORARIOS = {
+    1: "6:45 am a 8:25 am",
+    2: "8:30 am a 10:10 am",
+    3: "10:15 am a 11:45 am",
+    4: "11:50 am a 1:00 pm",
+    5: "1:00 pm a 2:30 pm",
+    6: "2:30 pm a 4:00 pm",
+    7: "4:00 pm a 5:30 pm",
+    8: "5:30 pm a 7:00 pm"
+}
+
 def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-    time.sleep(1)
+    subprocess.run('cls' if os.name == 'nt' else 'clear', shell=True)
+    time.sleep(0.5)
+
+def validar_correo(correo):
+    patron = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+    return re.match(patron, correo) is not None
+
+def abrir_camara():
+    # Intenta con DirectShow para evitar congelamientos en Windows
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(0)
+    return cap
 
 def guardar_rostro_directo(carnet_alumno, frame_bgr):
     try:
@@ -39,27 +69,23 @@ def guardar_rostro_directo(carnet_alumno, frame_bgr):
                 "UPDATE alumnos SET firma = ? WHERE carnet = ?", (firma_texto, carnet_alumno)
             )
             conexion.commit()
-            print(f"\n¡ÉXITO! Rostro del alumno ({carnet_alumno}) procesado y guardado en la base de datos.")
-            input("\nPresione ENTER para continuar...")
+            print(f"\n¡ÉXITO! Rostro del alumno ({carnet_alumno}) procesado y guardado.")
         else:
-            print("\nADVERTENCIA: No se detectó ningún rostro. Asegúrese de tener buena iluminación e intente de nuevo.")
-            input("\nPresione ENTER para continuar...")
+            print("\nADVERTENCIA: No se detectó ningún rostro. Asegúrese de tener buena iluminación.")
     except Exception as e:
         print(f"\nError al guardar el rostro: {e}")
-        input("\nPresione ENTER para continuar...")
+    input("\nPresione ENTER para continuar...")
 
 def tomar_asistencia_por_rostro():
     cursor.execute("SELECT carnet, nombre, firma FROM alumnos WHERE firma IS NOT NULL AND firma != ''")
     registros = cursor.fetchall()
 
     if not registros:
-        print("\nNo hay alumnos con firma facial registrada en el sistema.")
+        print("\nNo hay alumnos con firma facial registrada.")
         input("\nPresione ENTER para continuar...")
         return
 
-    rostros_conocidos = []
-    carnets_conocidos = []
-    nombres_conocidos = []
+    rostros_conocidos, carnets_conocidos, nombres_conocidos = [], [], []
 
     for carnet, nombre, firma_texto in registros:
         try:
@@ -70,14 +96,19 @@ def tomar_asistencia_por_rostro():
         except Exception:
             continue
 
-    cap = cv2.VideoCapture(0)
-    print("Iniciando cámara... Colóquese frente al lente y presione 'ESPACIO' para verificar su identidad.")
+    cap = abrir_camara()
+    if not cap.isOpened():
+        print("Error: No se pudo abrir la cámara.")
+        input("\nPresione ENTER para continuar...")
+        return
+
+    print("Iniciando cámara... Colóquese frente al lente y presione 'ESPACIO' para verificar asistencia.")
 
     frame_capturado = None
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Error al acceder a la cámara.")
+            print("Error al leer datos de la cámara.")
             break
 
         cv2.imshow("Verificacion de Asistencia - Presione ESPACIO", frame)
@@ -99,146 +130,159 @@ def tomar_asistencia_por_rostro():
                 coincidencias = face_recognition.compare_faces(rostros_conocidos, encoding_desconocido, tolerance=0.5)
 
                 if True in coincidencias:
-                    indice_coincidencia = coincidencias.index(True)
-                    carnet_detectado = carnets_conocidos[indice_coincidencia]
-                    nombre_detectado = nombres_conocidos[indice_coincidencia]
+                    indice = coincidencias.index(True)
+                    carnet_detectado = carnets_conocidos[indice]
+                    nombre_detectado = nombres_conocidos[indice]
 
                     print(f"\n¡Bienvenido {nombre_detectado} ({carnet_detectado})!")
-                    print("Asistencia registrada exitosamente en el sistema.")
+                    print("Asistencia registrada exitosamente.")
 
                     cursor.execute("UPDATE alumnos SET asistencia = asistencia + 1 WHERE carnet = ?", (carnet_detectado,))
                     conexion.commit()
                 else:
-                    print("\nRostro no reconocido. No se encontró coincidencia en la base de datos.")
+                    print("\nRostro no reconocido en el sistema.")
             else:
-                print("\nNo se detectó ningún rostro en la imagen capturada.")
-
+                print("\nNo se detectó ningún rostro en la imagen.")
         except Exception as e:
-            print(f"Error durante el proceso de verificación: {e}")
-            
+            print(f"Error durante el proceso: {e}")
+
     input("\nPresione ENTER para continuar...")
 
-def horarios():
-    print("Horarios disponibles: \n1- 6:45 am a 8:25 am \n2- 8:30 am a 10:10 am \n3- 10:15 am a 11:45 am \n4- 11:50 am a 1:00 pm \n5- 1:00 pm a 2:30 pm \n6- 2:30 pm a 4:00 pm \n7- 4:00 pm a 5:30 pm \n8- 5:30 pm a 7:00 pm")
+def seleccionar_horario():
+    print("\nHorarios disponibles:")
+    for key, val in DICCIONARIO_HORARIOS.items():
+        print(f"{key}- {val}")
     while True:
         try:
-            horario = int(input("Seleccione el indice del horario que desea: "))
+            horario = int(input("Seleccione el índice del horario: "))
             if 1 <= horario <= 8:
                 return horario
-            else:
-                print("Error: Por favor, ingrese un numero entre 1 y 8.")
+            print("Error: Ingrese un número entre 1 y 8.")
         except ValueError:
-            print("Error: Por favor, ingrese un indice valido.")
+            print("Error: Ingrese un índice válido.")
 
-def asignaturas():
-    lista = ["Programacion Estructurada", "Matematica IV", "Diseno de Bases de Datos", "Sistemas Operativos y Redes"]
-    print("Asignaturas disponibles: \n1- Programacion Estructurada \n2- Matematica IV \n3- Diseno de Bases de Datos \n4- Sistemas Operativos y Redes")
+def seleccionar_asignatura():
+    lista = ["Programación Estructurada", "Matemática IV", "Diseño de Bases de Datos", "Sistemas Operativos y Redes"]
+    print("\nAsignaturas disponibles:")
+    for idx, mat in enumerate(lista, 1):
+        print(f"{idx}- {mat}")
     while True:
         try:
-            asignatura = int(input("Seleccione el indice de la asignatura que desea: "))
-            if 1 <= asignatura <= 4:
-                return lista[asignatura - 1]
-            else:
-                print("Error: Por favor, ingrese un numero entre 1 y 4.")
+            asig = int(input("Seleccione el índice de la asignatura: "))
+            if 1 <= asig <= len(lista):
+                return lista[asig - 1]
+            print(f"Error: Ingrese un número entre 1 y {len(lista)}.")
         except ValueError:
-            print("Error: Por favor, ingrese un indice valido.")
+            print("Error: Ingrese un índice válido.")
 
 def registrar_alumno():
-    nombre = input("Ingrese el nombre completo del alumno: ").title()
-    while not nombre.replace(" ","").isalpha():
-        print("Por favor, ingrese un nombre valido (solo letras)")
-        nombre = input("Ingrese el nombre completo del alumno: ").title()
+    nombre = input("Ingrese el nombre completo del alumno: ")[:40].title()
+    while not nombre.replace(" ", "").isalpha():
+        print("Por favor, ingrese un nombre válido (solo letras).")
+        nombre = input("Ingrese el nombre completo del alumno: ")[:40].title()
+
     while True:
         try:
-            edad = int(input("Ingrese la edad: "))
-            if edad < 16 or edad > 80:
-                print("Por favor, ingrese una edad valida (entre 16 y 80)")
-                edad = int(input("Ingrese la edad: "))
-            else:
+            edad = int(input("Ingrese la edad (16-80): "))
+            if 16 <= edad <= 80:
                 break
+            print("Ingrese una edad válida (entre 16 y 80).")
         except ValueError:
-            print("Error: Por favor, ingrese una edad valida.")
+            print("Error: Ingrese un número válido.")
+
     carnet = input("Ingrese el carnet: ").upper()
+    
     correo = input("Ingrese el correo: ")
-    asignatura = asignaturas()
-    horario = horarios()
-    curso = input("Ingrese la seccion o grupo de la asignatura: ").title()
+    while not validar_correo(correo):
+        print("Correo no válido. Ejemplo de requerimiento: correo@catolica.edu.sv")
+        correo = input("Ingrese el correo: ")
 
     try:
-        cursor.execute("INSERT INTO alumnos (carnet, nombre, edad, correo, asignatura, horario, curso) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-                       (carnet, nombre, edad, correo, asignatura, horario, curso,))
+        cursor.execute(
+            "INSERT INTO alumnos (carnet, nombre, edad, correo, asistencia) VALUES (?, ?, ?, ?, 0)",
+            (carnet, nombre, edad, correo)
+        )
         conexion.commit()
-        print(f"Alumno {nombre} registrado exitosamente!")
 
-        tomar_foto = input("¿Desea tomar la foto del rostro ahora con la cámara? (S/N): ").strip().upper()
+        while True:
+            asig = seleccionar_asignatura()
+            horario_id = seleccionar_horario()
+            seccion = input("Ingrese la sección/grupo de la materia: ").title()
+
+            cursor.execute(
+                "INSERT INTO matriculas (carnet_alumno, asignatura, horario_id, seccion) VALUES (?, ?, ?, ?)",
+                (carnet, asig, horario_id, seccion)
+            )
+            conexion.commit()
+            print(f"-> Materia '{asig}' vinculada en horario ({DICCIONARIO_HORARIOS[horario_id]}).")
+
+            otra = input("¿Desea inscribir otra materia a este alumno? (S/N): ").strip().upper()
+            if otra != 'S':
+                break
+
+        print(f"\nAlumno {nombre} registrado exitosamente!")
+
+        tomar_foto = input("¿Desea tomar la foto del rostro ahora? (S/N): ").strip().upper()
         if tomar_foto == "S":
-            cap = cv2.VideoCapture(0)
-            print("Presione la tecla 'ESPACIO' para tomar la foto...")
-            frame_capturado = None
-            
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                cv2.imshow("Registro Facial - Presione ESPACIO", frame)
-                if cv2.waitKey(1) & 0xFF == ord(' '):
-                    frame_capturado = frame
-                    break
-            
-            cap.release()
-            cv2.destroyAllWindows()
+            cap = abrir_camara()
+            if cap.isOpened():
+                print("Presione 'ESPACIO' para tomar la foto...")
+                frame_capturado = None
+                while True:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    cv2.imshow("Registro Facial - Presione ESPACIO", frame)
+                    if cv2.waitKey(1) & 0xFF == ord(' '):
+                        frame_capturado = frame
+                        break
+                cap.release()
+                cv2.destroyAllWindows()
 
-            if frame_capturado is not None:
-                guardar_rostro_directo(carnet, frame_capturado)
+                if frame_capturado is not None:
+                    guardar_rostro_directo(carnet, frame_capturado)
+            else:
+                print("No se pudo abrir la cámara.")
 
     except sqlite3.IntegrityError:
         print(f"Error: El carnet {carnet} ya está registrado.")
+        input("\nPresione ENTER para continuar...")
 
 def mostrar_alumnos():
-    cursor.execute("SELECT * FROM alumnos")
+    cursor.execute("SELECT carnet, nombre, edad, correo, asistencia FROM alumnos")
     alumnos = cursor.fetchall()
 
     if alumnos:
-        for alumno in alumnos:
-            print(f"\nCarnet: {alumno[0]}")
-            print(f"Nombre: {alumno[1]}")
-            print(f"Edad: {alumno[2]}")
-            print(f"Correo: {alumno[3]}")
-            print(f"Asignatura: {alumno[4]}")
-            print(f"Horario: {alumno[5]}")
-            print(f"Asistencia: {alumno[6]}%")
+        for al in alumnos:
+            print(f"\nCarnet: {al[0]}")
+            print(f"Nombre: {al[1]} | Edad: {al[2]}")
+            print(f"Correo: {al[3]}")
+            print(f"Asistencias registradas: {al[4]}")
+            
+            cursor.execute("SELECT asignatura, horario_id, seccion FROM matriculas WHERE carnet_alumno = ?", (al[0],))
+            mats = cursor.fetchall()
+            print("Materias inscritas:")
+            for m in mats:
+                print(f"  - {m[0]} | Sección: {m[2]} | Horario: {DICCIONARIO_HORARIOS.get(m[1], 'N/A')}")
+            print("-" * 50)
     else:
-        print("No hay alumnos registrados.")   
+        print("No hay alumnos registrados.")
 
 def reporte_curso():
-    cursor.execute("SELECT DISTINCT curso FROM alumnos")
+    cursor.execute("SELECT DISTINCT asignatura FROM matriculas")
     cursos = cursor.fetchall()
 
     if cursos:
-        for curso in cursos:
-            nombre_curso = curso[0]
-
-            print(f"Asignatura: {nombre_curso}")
-
-            cursor.execute("SELECT * FROM alumnos WHERE curso = ?", (nombre_curso,))
-            alumnos_curso = cursor.fetchall()
-
-            aprobados = 0
-            reprobados = 0
-            suma_asistencia = 0
-
-            cantidad = len(alumnos_curso)
-            promedio_asistencia = suma_asistencia / cantidad
-
-            print(f"\nTotal de alumnos: {cantidad}")
-            print(f"Alumnos aprobados: {aprobados}")
-            print(f"Alumnos reprobados: {reprobados}")
-            print(f"Promedio de asistencia: {promedio_asistencia:.2f}%")
+        for c in cursos:
+            nombre_asig = c[0]
+            cursor.execute("SELECT COUNT(DISTINCT carnet_alumno) FROM matriculas WHERE asignatura = ?", (nombre_asig,))
+            total = cursor.fetchone()[0]
+            print(f"\nAsignatura: {nombre_asig} | Alumnos inscritos: {total}")
     else:
-        print("No hay cursos registrados.")     
+        print("No hay materias inscritas en el sistema.")
 
 def buscar_alumno(carnet):
-    cursor.execute("SELECT * FROM alumnos WHERE carnet = ?", (carnet,))
+    cursor.execute("SELECT carnet, nombre, edad, correo, asistencia FROM alumnos WHERE carnet = ?", (carnet,))
     return cursor.fetchone()
 
 def eliminar_alumno(carnet):
@@ -247,104 +291,102 @@ def eliminar_alumno(carnet):
 
 while True:
     try:
-        print("Bienvenido al administrador para Ingenieria en Desarrollo de Software! \n1-Ingresar como profesor \n2-Ingresar como alumno \n3-Salir")
+        print("\n=== Bienvenido al Sistema de Control Escolar ===")
+        print("1- Ingresar como profesor")
+        print("2- Ingresar como alumno (Marcar Asistencia)")
+        print("3- Salir")
 
-        menu = int(input("Seleccione el indice de la opcion que desea realizar: "))
+        menu = int(input("Seleccione una opción: "))
         clear_screen()
-        match menu:
-            case 1:
-                print("Ingresando como profesor... \n---------------------------------------------------------------------")
-                contra = getpass.getpass("Ingrese la contraseña: ")
+
+        if menu == 1:
+            autenticado = False
+            while True:
+                contra = getpass.getpass("Ingrese su contraseña Ingeniero Erazo :D (o '0' para cancelar): ")
                 if contra == "Catolica10":
-                    print("Contraseña correcta. Accediendo al sistema... \n==================================================== \nBienvenido ingeniero Erazo! \n====================================================")
-                    clear_screen()
-
-                    while True:               
-                        print("1-Registrar alumno \n2-Reporte de alumnos \n3-Reporte de curso \n4-Buscar alumno \n5-Administrar curso \n6-Eliminar alumno \n7-Regresar al menu principal")
-                        opcion = input("--------------------------------------------------------------------- \nSeleccione una opcion: ")
-            
-                        match opcion:
-                            case "1":
-                                registrar_alumno()
-                                clear_screen()
-                            case "2":
-                                mostrar_alumnos()
-                                input("\nPresione ENTER para regresar...")
-                                clear_screen()
-                            case "3":
-                                reporte_curso()
-                                input("\nPresione ENTER para regresar...")
-                                clear_screen()
-                            case "4":                            
-                                carnet_buscar = input("Ingrese el carnet del alumno a buscar: ").upper()
-                                if alumno := buscar_alumno(carnet_buscar):
-                                    print(f"Alumno con carnet {carnet_buscar} encontrado. \nCarnet: {alumno[0]} \nNombre: {alumno[1]} \nEdad: {alumno[2]} \nCorreo: {alumno[3]} \nAsignatura: {alumno[4]} \nHorario: {alumno[5]} \nAsistencia: {alumno[6]}%")
-                                else:
-                                    print(f"Alumno con carnet {carnet_buscar} no encontrado.")
-                                input("\nPresione ENTER para regresar...")
-                                clear_screen()
-
-                            case "5":
-                                print("Administrar curso... \n---------------------------------------------------------------------")
-                                nuevo_curso = input("Ingrese el nombre del curso: ")
-                                while not nuevo_curso.isalnum():
-                                    print("Error: El curso no debe tener caracteres especiales, solo numeros y letras.")
-                                    nuevo_curso = input("Ingrese el nombre del curso: ")                                    
-
-                                while True:
-                                    try:
-                                        total_clases = int(input("Defina la cantidad total de clases programadas: "))
-                                        if total_clases > 0:
-                                            break
-                                        print("Error: Debe ingresar un numero mayor a 0.")
-                                    except ValueError:
-                                        print("Error: Solo se permiten numeros enteros.")
-
-                                cancelar = input("Desea cancelar una clase hoy? (S/N): ").strip().upper()
-                                if cancelar == "S":
-                                    total_clases -= 1
-                                    print(f"Clase cancelada. El total de clases ahora es: {total_clases}")
-                                    print("Aprobando asistencia automaticamente a todos los alumnos por la clase cancelada...")
-
-                                cursor.execute("UPDATE alumnos SET asignatura = ?", (nuevo_curso,))
-                                conexion.commit()
-                                print(f"Asignatura '{nuevo_curso}' administrada y actualizada exitosamente!")
-                                input("\nPresione ENTER para regresar...")
-                                clear_screen()
-
-                            case "6":
-                                carnet_eliminar = input("Ingrese el carnet del alumno a eliminar: ").upper()
-                                cursor.execute("SELECT * FROM alumnos WHERE carnet = ?", (carnet_eliminar,))
-                                if alumno := cursor.fetchone():
-                                    confirmacion = input(f"Esta seguro de que desea eliminar al alumno {alumno[1]} con carnet {carnet_eliminar}? (S/N): ").strip().upper()
-                                    if confirmacion == "S":
-                                        eliminar_alumno(carnet_eliminar)
-                                        print(f"Alumno con carnet {carnet_eliminar} eliminado exitosamente.")
-                                    else:
-                                        print("Eliminación cancelada.")
-                                else:
-                                    print(f"Alumno con carnet {carnet_eliminar} no encontrado.")
-                                input("\nPresione ENTER para regresar...")
-                                clear_screen()
-
-                            case "7":
-                                print("Regresando al menu principal... \n====================================================")
-                                clear_screen()
-                                break
-                            case _:
-                                print("Opcion no valida. Por favor, seleccione un indice valido.")                        
+                    autenticado = True
+                    break
+                elif contra == "0":
+                    break
                 else:
-                    print("Contraseña incorrecta. Intente nuevamente.")                                            
+                    print("Contraseña incorrecta. Intente de nuevo.\n")
 
-            case 2:
-                print("Ingresando como alumno...")
-                tomar_asistencia_por_rostro()
+            if autenticado:
                 clear_screen()
-            case 3:
-                print("Saliendo...")
-                conexion.close()
-                break
-            case _:
-                print("Opcion no valida. Por favor, seleccione un indice valido.")
+                while True:
+                    print("\n--- MENÚ PROFESOR ---")
+                    print("1- Registrar alumno")
+                    print("2- Reporte de alumnos")
+                    print("3- Reporte de cursos")
+                    print("4- Buscar alumno")
+                    print("5- Administrar curso")
+                    print("6- Eliminar alumno")
+                    print("7- Regresar al menú principal")
+                    
+                    opcion = input("Seleccione una opción: ")
+
+                    if opcion == "1":
+                        registrar_alumno()
+                        clear_screen()
+                    elif opcion == "2":
+                        mostrar_alumnos()
+                        input("\nPresione ENTER para regresar...")
+                        clear_screen()
+                    elif opcion == "3":
+                        reporte_curso()
+                        input("\nPresione ENTER para regresar...")
+                        clear_screen()
+                    elif opcion == "4":
+                        carnet_b = input("Ingrese el carnet a buscar: ").upper()
+                        al = buscar_alumno(carnet_b)
+                        if al:
+                            print(f"\nCarnet: {al[0]}\nNombre: {al[1]}\nEdad: {al[2]}\nCorreo: {al[3]}\nAsistencias: {al[4]}")
+                            cursor.execute("SELECT asignatura, horario_id, seccion FROM matriculas WHERE carnet_alumno = ?", (al[0],))
+                            mats = cursor.fetchall()
+                            print("Materias:")
+                            for m in mats:
+                                print(f"  - {m[0]} ({m[2]}) en horario {DICCIONARIO_HORARIOS.get(m[1])}")
+                        else:
+                            print("Alumno no encontrado.")
+                        input("\nPresione ENTER para regresar...")
+                        clear_screen()
+                    elif opcion == "5":
+                        print("--- Administrar Curso ---")
+                        nuevo_curso = input("Ingrese el nombre de la asignatura a modificar/crear: ")
+                        cancelar = input("¿Desea justificar asistencia general para una clase? (S/N): ").strip().upper()
+                        if cancelar == "S":
+                            cursor.execute("UPDATE alumnos SET asistencia = asistencia + 1")
+                            conexion.commit()
+                            print("Asistencia incrementada a todos los alumnos.")
+                        input("\nPresione ENTER para regresar...")
+                        clear_screen()
+                    elif opcion == "6":
+                        carnet_e = input("Ingrese el carnet del alumno a eliminar: ").upper()
+                        al = buscar_alumno(carnet_e)
+                        if al:
+                            conf = input(f"¿Eliminar a {al[1]} ({carnet_e})? (S/N): ").strip().upper()
+                            if conf == "S":
+                                eliminar_alumno(carnet_e)
+                                print("Alumno eliminado correctamente.")
+                        else:
+                            print("Alumno no encontrado.")
+                        input("\nPresione ENTER para regresar...")
+                        clear_screen()
+                    elif opcion == "7":
+                        clear_screen()
+                        break
+                    else:
+                        print("Opción no válida.")
+
+        elif menu == 2:
+            print("Ingresando como alumno...")
+            tomar_asistencia_por_rostro()
+            clear_screen()
+        elif menu == 3:
+            print("Saliendo...")
+            conexion.close()
+            break
+        else:
+            print("Opción no válida.")
     except ValueError:
-        print("Error: Por favor, ingrese un numero valido.")
+        print("Error: Por favor, ingrese un número válido.")
